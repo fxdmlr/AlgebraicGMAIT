@@ -1164,7 +1164,9 @@ class poly:
                 new_arr.append([i.real, sgn(self.diff().diff()(i))])
         return new_arr
         
-        
+    def laplacian(self):
+        return sum([rexp_poly(self.coeffs[i] * math.factorial(i), poly([0, 1]) ** (i + 1)) for i in range(len(self.coeffs[:]))])
+
     @staticmethod
     def rand(deg, coeff_range = [0, 10], sgn_sensitive=1):
         if sgn_sensitive:
@@ -1201,8 +1203,10 @@ class poly:
 class rexp_poly:
     def __init__(self, p1, p2):
         if isinstance(p1, poly) and isinstance(p2, poly):
-            if all([abs(int(i.real) - float(i.real)) < 0.001 for i in p1.coeffs[:]+p2.coeffs[:]]):
-                g = math.gcd(math.gcd(*(map(int, p1.coeffs[:])) if hasattr(p1, 'coeffs') else p1), math.gcd(*(map(int, p2.coeffs[:])) if hasattr(p2, 'coeffs') else p2))
+            cond = all([i.imag == 0 for i in p1.coeffs[:] + p2.coeffs[:]])
+
+            if all([abs(int(i.real) - float(i.real)) < 0.001 for i in p1.coeffs[:]+p2.coeffs[:]]) and cond:
+                g = math.gcd(math.gcd(*(map(lambda t : int(t.real), p1.coeffs[:])) if hasattr(p1, 'coeffs') else p1), math.gcd(*(map(lambda t : int(t.real), p2.coeffs[:])) if hasattr(p2, 'coeffs') else p2))
                 self.p1 = p1 * (1/g)
                 self.p2 = p2 * (1/g)
             else:
@@ -1211,9 +1215,12 @@ class rexp_poly:
         else:
             self.p1 = p1
             self.p2 = p2
+
     
     def __call__(self, x):
-        return self.p1(x) / self.p2(x)
+        a = self.p1(x) if callable(self.p1) else self.p1
+        b = self.p2(x) if callable(self.p2) else self.p2
+        return a/b
     
     def simplification(self):
         if isinstance(self.p1, (int, float)) and isinstance(self.p2, (int, float)):
@@ -1333,7 +1340,9 @@ class rexp_poly:
     __rmul__ = __mul__
     __radd__ = __add__
     def diff(self):
-        return rexp_poly(self.p1.diff() * self.p2 - self.p2.diff() * self.p1, self.p2 * self.p2)
+        a = self.p1.diff() if hasattr(self.p1, 'diff') else 0
+        b = self.p2.diff() if hasattr(self.p2, 'diff') else 0
+        return rexp_poly(a * self.p2 - b * self.p1, self.p2 * self.p2)
     
     def npprint(self, prev_ppr='default'):
         return Div([self.p1, self.p2]).npprint()
@@ -1361,9 +1370,49 @@ class rexp_poly:
             return self
         else:
             return self.diff().ndiff(n - 1)
+    
+    def res(self, r):
+        q_roots = self.p2.roots()
+        flag = 0
+        inds = []
+        counter = 0
+        for i in q_roots:
+            if abs(i - r) < 10 ** (-3):
+                flag += 1
+                inds += [counter]
+            
+            counter += 1
+
+        if not flag:
+            return 0
+        new_poly = self.p2.coeffs[-1]
+        for i in range(len(q_roots)):
+            if i in inds:
+                continue
+            else:
+                new_poly *= poly([-q_roots[i], 1])
+        
+        new_r = rexp_poly(self.p1, new_poly)
+        res = new_r.ndiff(flag - 1)(r) / math.factorial(flag - 1)
+        return res
+
         
     def integrate(self, lb, hb):
-        pass
+        if lb == '-inf' and hb == 'inf':
+            q_roots = self.p2.roots()
+            #s = sum([self.res(i) if i.imag >= 0 else 0 for i in q_roots])
+            s = 0
+            for i in q_roots:
+                if i.imag > 10**(-5):
+                    s += 2 * math.pi * complex(0, 1) * self.res(i)
+                elif abs(i.imag) <= 10 ** (-5):
+                   s += math.pi * complex(0, 1) * self.res(i) 
+            return s
+        else:
+            f = uint.integrate_ratexp(self.p1, self.p2)
+            return f(hb) - f(lb)
+        
+
     @staticmethod
     def rand(nranges = [-10, 10], deg = 3, deg_diff=1):
         return rexp_poly(poly.rand(random.randint(0, deg - deg_diff), coeff_range=nranges[:]), poly.rand(deg, coeff_range=nranges[:]))
@@ -1704,6 +1753,77 @@ class matrix:
         arr = [[int(i == j) for j in range(dim)] for i in range(dim)]
         return matrix(arr)
 
+
+
+class MLaplacianType(object):
+    def __init__(self, p, q, f1, f2, type=0):
+        '''
+        this represents :
+        if type == 0:
+            p(x)*exp(f1 * x)*sin(f2*x) / q(x)
+        if type == 1:
+            p(x)*exp(f1 * x)*cos(f2*x) / q(x)
+        
+        where p and q are poly
+        f1 and f2 are numbers (integers or floats)
+
+        '''
+        self.p = p
+        self.q = q
+        self.f1 = f1
+        self.f2 = f2
+        self.type = type
+    
+    def __call__(self, x):
+        return self.p(x) * math.exp(self.f1 * x) * math.cos(self.f2 * x) / self.q(x) if self.type else self.p(x) * math.exp(self.f1 * x) * math.sin(self.f2 * x) / self.q(x)
+    
+    def diff(self):
+        rex = rexp_poly(self.p, self.q)
+        rexdiff = rex.diff()
+        res = rexdiff + self.f1 * rex
+        r2 = rex * self.f2 * (-1) ** (self.type)
+        a = MLaplacianType(res.p1, res.p2, self.f1, self.f2, type=self.type)
+        b = MLaplacianType(r2.p1, r2.p1, self.f1, self.f2, type=1-self.type)
+        return LaplacianType([a, b])
+    
+    def integrate(self, lb, hb):
+        if (hb == 'inf' and self.f1 > 0) or (lb == '-inf' and self.f1 < 0):
+            return float('inf')
+
+        elif lb == 0 and hb == 'inf' and self.q == 1:
+            if self.f1 >= 0:
+                return float('inf')
+            else:
+                lap_r = rexp_poly(self.f2, poly(self.f2**2, 0, 1)) if not self.type else  rexp_poly(poly([0, 1]), poly(self.f2**2, 0, 1)) 
+                return sum([(-1)**i * self.p.coeff[i] * lap_r.ndiff(i)(self.f1) for i in range(len(self.p1.coeffs[:]))])
+        elif lb == '-inf' and hb == 'inf' and self.f1 == 0:
+            pass
+
+
+class LaplacianType(object):
+    def __init__(self, arr):
+        '''
+        this represents the sum of the objects in arr where each element is a MLaplacianType
+
+        '''
+        new_arr = []
+        for i in arr:
+            if isinstance(i, MLaplacianType):
+                new_arr.append(i)
+            elif isinstance(i, LaplacianType):
+                new_arr += i.arr[:]
+        
+        self.arr = new_arr[:]
+    
+    def __call__(self, x):
+        return sum([i(x) for i in self.arr])
+    
+    def diff(self):
+        return LaplacianType([i.diff() for i in self.arr[:]])
+    
+    def integrate(self):
+        pass
+
 class vect:
     def __init__(self, array):
         self.array = array[:]
@@ -1750,7 +1870,8 @@ class vect:
     
     __radd__ = __add__
     __rmul__ = __mul__
-    
+
+
     
 class pcurve:
     def __init__(self, farr):
@@ -2283,7 +2404,8 @@ class vectF:
         return vectF([random.randint(nranges[0], nranges[1]) * c,
                       random.randint(nranges[0], nranges[1]) * s ,
                       0])
-        
+
+
 class Sum:
     def __new__(cls, array):
         arr = []
