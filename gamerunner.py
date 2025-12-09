@@ -1,20 +1,20 @@
 import time
 import gamehandler as gh
+import os
 
-def cls(n=100):
-    print(''.join(['\n' for i in range(n)]))
 def static_runner(function, rounds, inpt_dict):
-    cls()
     null, number_of_rounds = rounds
     start = time.time()
     pts = 0
+    print("".join(['\n' for i in range(100)]))
     for i in range(number_of_rounds):
         string, res, conv_method = function(inpt_dict)
         st = time.time()
-        nn = input("%s"%string)
-        if nn == 'r':
+
+        entry = input("%s"%string)
+        if entry == "r":
             return static_runner(function, rounds, inpt_dict)
-        entry = conv_method(nn)
+        entry = conv_method(entry[:])
         en = time.time()
         if entry == res:
             print("Correct.")
@@ -29,21 +29,21 @@ def static_runner(function, rounds, inpt_dict):
     return [pts / number_of_rounds * 100, end - start, (end - start) / number_of_rounds]
 
 def dynamic_runner(function, time_tuple, inpt_dict):
-    cls
     time_per, rounds = time_tuple
     pts = 0
     number_of_rounds = 0
+    print("".join(['\n' for i in range(100)]))
     while number_of_rounds < rounds:
         string, res, conv_function = function(inpt_dict)
         number_of_rounds += 1
         start = time.time()
         print(string)
         time.sleep(time_per)
-
-        nn = input("%s"%string)
-        if nn == 'r':
+        os.system("clear")
+        entry = input("%s"%string)
+        if entry == "r":
             return static_runner(function, rounds, inpt_dict)
-        entry = conv_function(nn)
+        entry = conv_function(entry[:])
         end = time.time()
         
         if entry == res:
