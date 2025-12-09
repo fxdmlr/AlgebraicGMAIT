@@ -3,6 +3,7 @@ import utils
 import evaluator as evl
 import problem_set_calc
 import calcI_int_problemset as cint
+import random
 
 '''
 The output of each function is as follows : 
@@ -41,3 +42,15 @@ def integral_set_game(inpt_dict):
             pass
     return utils.strpprint(a) + '\n > ', b, lambda x : b if abs(float(x)- b) < abs(moe * b) else b + 1
 
+def shuffle(inpt_dict):
+    i = 0
+    f = [cint, problem_set_calc]
+    while not i:
+        k = f[random.randint(0, len(f) - 1)]
+        try:
+            a, b = k.single_number_gen()
+            moe = inpt_dict['moe']
+            i = 1
+        except:
+            pass
+    return utils.strpprint(a) + '\n > ', b, lambda x : b if abs(float(x)- b) < abs(moe * b) else b + 1
